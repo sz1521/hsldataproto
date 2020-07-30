@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import "./map.css";
-import { Map, Marker, Popup, TileLayer } from "react-leaflet";
+import { Map, Marker, Popup, TileLayer, CircleMarker } from "react-leaflet";
 
 const MapView = (props) => {
   const { position, data, busPosition = [0, 0] } = props;
@@ -27,7 +27,7 @@ const MapView = (props) => {
             data.features[0].properties.region}
         </Popup>
       </Marker>
-      <Marker position={busPosition} />
+      <CircleMarker center={busPosition} radius={20} />
     </Map>
   );
 };
