@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import "./app.css";
-import axios from "axios";
 // import Button from "@material-ui/core/Button";
-import MapView from "../map"
+import MapView from "../map";
+import bbox2geohashes from "../../util/bbox2geohashes";
 
 var mqtt = require("mqtt");
 var options = {
@@ -12,43 +12,46 @@ var options = {
   port: 443,
   useSSL: true,
 };
-var client = mqtt.connect("wss://mqtt.hsl.fi:443/", options);
+const client = mqtt.connect("wss://mqtt.hsl.fi:443/", options);
 
+const dev = true;
 
 const App = () => {
-  const [data, setData] = useState();
-  const [busData, setBusData] = useState();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
-  const [locationLat, setLocationLat] = useState(60.1668392);
-  const [locationLon, setLocationLon] = useState(24.9391116);
+  const [location, setLocation] = useState([0, 0]);
+  const [busPosition, setBusPosition] = useState([0, 0]);
 
-  const [mesg, setMesg] = useState(
-    <>
-      <em>nothing heard</em>
-    </>
-  );
-
-  var note;
   client.on("message", function (topic, message) {
-    console.log("Incoming message!");
-    note = message.toString();
-    // Updates React state with message
-    setMesg(note);
-    console.log(note);
-    client.end();
+    let d = new Date();
+    let n = d.getSeconds();
+    if (n % 6 === 0) {
+      const jsonMessage = JSON.parse(message.toString());
+      if (
+        jsonMessage &&
+        jsonMessage.VP &&
+        jsonMessage.VP.lat > 0 &&
+        jsonMessage.VP.long > 0
+      ) {
+        setBusPosition([jsonMessage.VP.lat, jsonMessage.VP.long]);
+        console.log("Bus located! at ", [
+          jsonMessage.VP.lat,
+          jsonMessage.VP.long,
+        ]);
+      }
+    }
   });
 
   const getLocation = () => {
-    if ("geolocation" in navigator) {
+    if (dev) {
+      setLocation([60.1668392, 24.9391116]);
+    } else if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(function (position) {
-        // console.log("Latitude is :", position.coords.latitude);
-        setLocationLat(position.coords.latitude);
-        // console.log("Longitude is :", position.coords.longitude);
-        setLocationLon(position.coords.longitude);
+        setLocation([position.coords.latitude, position.coords.longitude]);
       });
     } else {
       console.log("Geolocation not Available");
+      setLocation([60.1668392, 24.9391116]);
     }
   };
 
@@ -56,51 +59,55 @@ const App = () => {
     getLocation();
   }, []);
 
-  // for testing only
-  useEffect(() => {
-    console.info(data);
-  }, [data]);
+  const unSubscribe = () => {
+    const boxArea = bbox2geohashes(
+      location[0] - 0.01,
+      location[1] - 0.01,
+      location[0] + 0.01,
+      location[1] + 0.01
+    );
+
+    boxArea.forEach((area) => {
+      client.unsubscribe(
+        "/hfp/v2/journey/ongoing/+/+/+/+/+/+/+/+/+/+/" + area + "/+/#"
+      );
+    });
+  };
+
+  const subscribe = () => {
+    const boxArea = bbox2geohashes(
+      location[0] - 0.01,
+      location[1] - 0.01,
+      location[0] + 0.01,
+      location[1] + 0.01
+    );
+
+    boxArea.forEach((area) => {
+      client.subscribe(
+        "/hfp/v2/journey/ongoing/+/+/+/+/+/+/+/+/+/+/" + area + "/+/#"
+      );
+    });
+  };
 
   useEffect(() => {
-    console.info(busData);
-  }, [busData]);
-
-  useEffect(() => {
-    client.subscribe('/hfp/v2/journey/ongoing/vp/+/+/+/+/+/+/+/+/0/#');
-
-    const fetchData = async () => {
-      setIsLoading(true);
-      setIsError(false);
-
-      try {
-        const result = await axios(
-          "https://api.digitransit.fi/geocoding/v1/reverse?point.lat=" +
-            locationLat +
-            "&point.lon=" +
-            locationLon +
-            "&size=1"
-        );
-        setData(result.data);
-      } catch (error) {
-        setIsError(true);
-      }
+    if (location[0] !== 0) {
+      subscribe();
       setIsLoading(false);
-    };
+    }
+  }, [location]);
 
-    fetchData();
-  }, [locationLat, locationLon]);
-
-  const mapRef = useRef();
   return (
     <div className="App">
       {isLoading && <p>Loading...</p>}
       {isError && <p>Loading error!</p>}
 
-      <MapView position={[locationLat, locationLon]} data/>
-      <p>The message is: {mesg}</p>
+      {location && (
+        <MapView position={location} data busPosition={busPosition} />
+      )}
+      {/* <p>{mesg}</p> */}
       {/* <Button onClick={getLocation}>Find me</Button> */}
     </div>
   );
-}
+};
 
 export default App;
