@@ -18,13 +18,14 @@ var options = {
 const client = mqtt.connect("wss://mqtt.hsl.fi:443/", options);
 
 // if dev, uses fake GPS location
-const dev = false;
+const dev = true;
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [location, setLocation] = useState([0, 0]);
   const [busPosition, setBusPosition] = useState([0, 0]);
   const [soundVolume, setSoundVolume] = useState(0);
+  const [area, setArea] = useState([]);
 
   client.on("message", function (topic, message) {
     let d = new Date();
@@ -71,14 +72,7 @@ const App = () => {
 
   useEffect(() => {
     const unSubscribe = () => {
-        const boxArea = bbox2geohashes(
-          location[0] - 0.01,
-          location[1] - 0.01,
-          location[0] + 0.01,
-          location[1] + 0.01
-        );
-    
-        boxArea.forEach((area) => {
+        area.forEach((area) => {
           client.unsubscribe(
             "/hfp/v2/journey/ongoing/+/+/+/+/+/+/+/+/+/0/" + area + "/+/#"
           );
@@ -90,7 +84,7 @@ const App = () => {
     return () => {
       window.removeEventListener('beforeunload', unSubscribe);
     }
-  }, [location]);
+  }, [area]);
 
   const subscribe = useCallback(() => {
     const boxArea = bbox2geohashes(
@@ -99,6 +93,7 @@ const App = () => {
       location[0] + 0.01,
       location[1] + 0.01
     );
+    setArea(boxArea);
     client.setMaxListeners(boxArea.length);
     // get only most important status changes (geohash_level 0: 3 %) in GPS area
     // https://digitransit.fi/en/developers/apis/4-realtime-api/vehicle-positions/
