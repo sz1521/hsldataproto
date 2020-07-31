@@ -12,7 +12,7 @@ const MapView = (props) => {
       // useFlyTo={true}
       animate
       center={position}
-      zoom={16}
+      zoom={14}
       enableHighAccuracy
       style={{
         height: "100vh",
