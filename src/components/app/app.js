@@ -18,7 +18,7 @@ var options = {
 const client = mqtt.connect("wss://mqtt.hsl.fi:443/", options);
 
 // if dev, uses fake GPS location
-const dev = true;
+const dev = false;
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
