@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import "./app.css";
-// import Button from "@material-ui/core/Button";
 import MapView from "../map";
 import bbox2geohashes from "../../util/bbox2geohashes";
+import useSound from 'use-sound';
+import radarSFX from '../../sounds/beep.mp3';
+import getDistance from "../../util/distance";
+import normalize from "../../util/normalize";
 
 var mqtt = require("mqtt");
 var options = {
@@ -14,13 +17,14 @@ var options = {
 };
 const client = mqtt.connect("wss://mqtt.hsl.fi:443/", options);
 
-const dev = true;
+// if dev, uses fake GPS location
+const dev = false;
 
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
   const [location, setLocation] = useState([0, 0]);
   const [busPosition, setBusPosition] = useState([0, 0]);
+  const [soundVolume, setSoundVolume] = useState(0);
 
   client.on("message", function (topic, message) {
     let d = new Date();
@@ -32,17 +36,21 @@ const App = () => {
         jsonMessage &&
         jsonMessage.VP &&
         jsonMessage.VP.lat > 0 &&
-        jsonMessage.VP.long > 0
+        jsonMessage.VP.long > 0 &&
+        (busPosition!==[jsonMessage.VP.lat, jsonMessage.VP.long])
       ) {
         setBusPosition([jsonMessage.VP.lat, jsonMessage.VP.long]);
-        console.log("Vehicle located! at ", [
-          jsonMessage.VP.lat,
-          jsonMessage.VP.long,
-          jsonMessage.VP.veh,
-        ]);
-      }
+        const distance = getDistance(location[0], location[1], jsonMessage.VP.lat, jsonMessage.VP.long)
+        if (distance < 1000) {
+          setSoundVolume(normalize(distance));
+          stop();
+          play();
+         }
+       }
     }
   });
+
+  const [play, { stop }] = useSound(radarSFX,{ volume: soundVolume });
 
   const getLocation = () => {
     if (dev) {
@@ -61,20 +69,28 @@ const App = () => {
     getLocation();
   }, []);
 
-  const unSubscribe = () => {
-    const boxArea = bbox2geohashes(
-      location[0] - 0.01,
-      location[1] - 0.01,
-      location[0] + 0.01,
-      location[1] + 0.01
-    );
-
-    boxArea.forEach((area) => {
-      client.unsubscribe(
-        "/hfp/v2/journey/ongoing/+/+/+/+/+/+/+/+/+/0/" + area + "/+/#"
-      );
-    });
-  };
+  useEffect(() => {
+    const unSubscribe = () => {
+        const boxArea = bbox2geohashes(
+          location[0] - 0.01,
+          location[1] - 0.01,
+          location[0] + 0.01,
+          location[1] + 0.01
+        );
+    
+        boxArea.forEach((area) => {
+          client.unsubscribe(
+            "/hfp/v2/journey/ongoing/+/+/+/+/+/+/+/+/+/0/" + area + "/+/#"
+          );
+        });
+    }
+  
+    window.addEventListener('beforeunload', unSubscribe);
+  
+    return () => {
+      window.removeEventListener('beforeunload', unSubscribe);
+    }
+  }, [location]);
 
   const subscribe = useCallback(() => {
     const boxArea = bbox2geohashes(
@@ -103,13 +119,9 @@ const App = () => {
   return (
     <div className="App">
       {isLoading && <p>Loading...</p>}
-      {isError && <p>Loading error!</p>}
-
       {!isLoading && location && (
         <MapView position={location} data busPosition={busPosition} />
       )}
-      {/* <p>{mesg}</p> */}
-      {/* <Button onClick={getLocation}>Find me</Button> */}
     </div>
   );
 };
