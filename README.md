@@ -1,3 +1,12 @@
+
+
+Vehicle Radar
+
+Only works in HSL area. Use dev = true (app.js) to use without actual GPS location!
+
+
+---
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
